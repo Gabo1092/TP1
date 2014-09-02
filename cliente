@@ -1,0 +1,62 @@
+#include<stdio.h>
+#include<string.h>
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<netinet/in.h>
+#include<arpa/inet.h>
+
+int main(){
+	int conectado;
+	struct sockaddr_in Cliente;
+	int con_sv;
+	char ch[1024];
+	char c[1024];
+	int inicio = 0;
+	int ciclo =1;
+
+	FILE *puerto = fopen("puerto.txt", "r");
+	if (puerto==NULL)
+	{
+		perror ("Error al abrir fichero.txt");
+		return -1;
+	}
+ 
+	int Puerto;
+	fscanf (puerto, "%d", &Puerto);
+
+	while(ciclo){
+		conectado = socket(AF_INET, SOCK_STREAM,0);
+		//llenado de la estructura de datos
+		Cliente.sin_family = AF_INET;
+		Cliente.sin_addr.s_addr = INADDR_ANY;
+		Cliente.sin_port = Puerto;
+		int lenCliente = sizeof(Cliente);
+		
+		//int conecto = 1;
+		//conectar con el server
+		con_sv = connect(conectado, (struct sockaddr *)&Cliente, lenCliente);
+		if(con_sv ==-1){
+			printf("NO SE CONECTO CON EL SV");
+			perror("ERROR EN LA CONEXION\n");
+			ciclo = 0;
+			inicio = 1;
+		}	
+			//validar el inicio de sesion
+			if(inicio==0){
+				printf("--------------- SESION INICIADA --------------\n");
+				recv(conectado, ch, 1024,0);
+				printf("%s\n",ch);
+				inicio = 1;
+			}
+
+			printf("ingrese una cadena para enviar a su amigo: "); //hacer forma para elegir el nombre de la persona q escogio
+			scanf("%*c%[^\n]",c);
+			send(conectado,c, 1024,0);
+
+			recv(conectado, ch, 1024,0);
+			printf("El amigo dijo: %s\n",ch); //hacer forma para elegir el nombre de la persona q escogio
+	}
+	close(conectado);
+	return 0;
+
+}
