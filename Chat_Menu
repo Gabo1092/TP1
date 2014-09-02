@@ -1,0 +1,307 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h> 
+#include <signal.h>
+#include <arpa/inet.h>
+
+
+//Macros para los colores de texto
+#define Verde "\x1b[32m"
+#define Azul "\x1b[34m"
+#define ResetColor "\x1b[0m"
+
+typedef struct{
+char nombre[100];
+} contacto;
+
+int servidor() //int argc, char *argv[])
+{	 
+		printf("Bienvenidos al servidor\n\n");
+
+		int socketCreado, socketCliente; //Es un puntero a la estructura sockaddr, que contiene puerto e IP. 
+		int numeroPuerto; // Donde guardo el Numero de puerto
+		socklen_t largoCliente; //Tamaño de la dirección
+		char enviar[1024];
+		char buf[1024];
+		char buffer[1024]; 
+		struct sockaddr_in direcServer, direcCliente;//Estructuras con las direcciones del servidor y el cliente
+
+		FILE *puerto = fopen("puerto.txt", "r");
+		
+		if (puerto==NULL)
+		{
+			perror ("Error al abrir fichero.txt");
+			return -1;
+		}
+		fscanf (puerto, "%d", &numeroPuerto);
+		
+		//Lo que devulve la llamada socket es lo que se utilizara para conectarse
+		socketCreado = socket(AF_INET, SOCK_STREAM, 0); //AF_INET Dominio, SOCK_STREAM Tipo, 0 protocolo
+		
+		if (socketCreado < 0) { //Socket creado es -1 si presento un error al ser creado
+			fprintf(stderr,"Error:No se pudo crear el socket \n\a");
+			exit(1);
+		}   
+		
+		//Hago set de las propiedades que tiene la estructura que contiene la dirección del server
+		direcServer.sin_family = AF_INET; 
+		direcServer.sin_addr.s_addr = INADDR_ANY; /* INADDR_ANY sirve para esta fase del proyecto porque permite que reciba
+		los paquetes por cualquier interfaz, otra manera seria inet_addr("127.0.0.1") si se recibiera desde consola en que 
+		interfaz esta escuchando tambien se deberia convertir a network byte order */
+		direcServer.sin_port = numeroPuerto;/* Se utiliza el htons porque debe estar en network byte order
+		convierte el valor de maquina a uno de red la manera inversa seria ntohs */
+		//
+		int resbind=bind(socketCreado, (struct sockaddr *) &direcServer,sizeof(direcServer)); /* Se utiliza para darle al servidor por donde 
+		escuchar para que el cliente se conecte */
+		printf("bind");
+		if (resbind< 0){
+		 fprintf(stderr,"Error:No se pudo escuchar en el puerto solicitado. \n\a");
+		 exit(1);
+		}
+
+		listen(socketCreado,5);/* Permite que se escuche por el socket que se habia creado, el segundo argumento es el numero
+		de conecciones en cola que permite */
+
+		largoCliente = sizeof(direcCliente); //Determina el largo de la dirección del cliente
+
+		while(1){
+			socketCliente = accept(socketCreado, (struct sockaddr *) &direcCliente, &largoCliente); /* La función accept recibe el socket
+		, la estructura y el largo de la dirección */
+			if (socketCliente < 0){
+				fprintf(stderr,"Error: Aceptando la conexión. \n\a");
+				exit(1);	 
+			}
+			
+			printf("------SESION INICIADA------\n");
+			printf("CLIENTE CONECTADO\n");
+			send(socketCliente, enviar, 1024,0);
+
+			recv(socketCliente,buf,256,0);
+			if(strcmp(buf,"salir")==0){
+				break;
+			}
+			printf( Azul "Cliente: %s\n" ResetColor,buf);
+			
+			printf("Escribir mensaje: ");
+			scanf("%*c%[^\n]",buffer);
+			send(socketCliente,buffer,256,0);
+			if(strcmp(buffer,"salir")==0){
+				break;
+			}
+		}
+		close(socketCreado);close(socketCliente); //Cierro los sockets
+		return 0;
+}
+
+// FUNCION CLIENTE
+int cliente(){
+	int conectado;
+	struct sockaddr_in Cliente;
+	int con_sv;
+	char ch[1024];
+	char c[1024];
+	int inicio = 0;
+	int ciclo =1;
+
+	FILE *puerto = fopen("puerto.txt", "r");
+	if (puerto==NULL)
+	{
+		perror ("Error al abrir fichero.txt");
+		return -1;
+	}
+ 
+	int Puerto;
+	fscanf (puerto, "%d", &Puerto);
+
+	while(ciclo){
+		conectado = socket(AF_INET, SOCK_STREAM,0);
+		//llenado de la estructura de datos
+		Cliente.sin_family = AF_INET;
+		Cliente.sin_addr.s_addr = INADDR_ANY;
+		Cliente.sin_port = Puerto;
+		int lenCliente = sizeof(Cliente);
+		
+		//conectar con el server
+		con_sv = connect(conectado, (struct sockaddr *)&Cliente, lenCliente);
+		if(con_sv ==-1){
+			printf("NO SE CONECTO CON EL SV\n");
+			perror("ERROR EN LA CONEXION\n");
+			ciclo = 0;
+			inicio = 1;
+		}	
+			//validar el inicio de sesion
+			if(inicio==0){
+				printf("--------------- SESION INICIADA --------------\n");
+				recv(conectado, ch, 1024,0);
+				printf("%s\n",ch);
+				inicio = 1;
+			}
+
+			printf("ingrese una cadena para enviar a su amigo: "); 
+			scanf("%*c%[^\n]",c);
+			send(conectado,c, 1024,0);
+
+			recv(conectado, ch, 1024,0);
+			printf(Verde "El amigo dijo: %s\n" ResetColor,ch); 
+	}
+	close(conectado);
+	return 0;
+}
+
+void imprimirContacto(contacto *ptr) {
+	if (ptr->nombre){
+		printf(" Nombre = %s\n",ptr->nombre);
+	}
+}
+
+int main(){
+	
+		//Leer los contactos y almacenarlos//
+		
+	FILE *archivo; //definicion de una variable puntero de tipo de FILE para abrir el archivo deseado
+	archivo = fopen("Contactos.txt","r"); //abrir el .txt de Contactos
+	if (archivo == NULL){ //si el archivo no existe, para aquí
+		FILE *crear;
+		crear = fopen("Contactos.txt","w+"); //crear el archivo 'Contactos.txt'
+		fclose(crear);
+		return 0;
+	}
+	contacto contactos[100]; //arreglo de contactos
+	int numContacto = 0; //numero de contacto actual en el arreglo
+	
+	//Variables para ir llenando cada contacto, de tamaño 100 porque así se almacenará palabra por palabra
+	char leerNombre[100]; //nombre
+	while ((fscanf(archivo,"%s",leerNombre) == 1) && (numContacto<100)) {
+	strncpy(contactos[numContacto].nombre,leerNombre,100);
+	
+	numContacto++;
+	}
+	fclose(archivo); //cerrar el archivo de lectura
+	
+	printf("Bienvenidos al Chat\n\n");
+			//Menú de opciones//
+			
+	printf("***** Menú *****\n\nSeleccione una de las siguientes opciones:\n");
+	printf("1- Agregar contactos\n");
+	printf("2- Ver contactos\n");
+	printf("3- Chatear\n\n");
+	
+	int opcion; //donde se almacenará el input de opción del usuario
+	scanf("%d",&opcion); //scanear el input del usuario
+	while ((opcion < 0) || (opcion > 3)){ //restricciones
+		printf("Ingrese un número de opción correcto: ");
+		while (getchar()!='\n'); //limpiar el registro de standard input hasta la nueva línea 
+			scanf("%d",&opcion); //volver a scanear hasta llegar a un valor válido
+		}
+		//Variables para ingresar los campos del nuevo contacto
+		char inputNombre[100];
+		int numero = 0; //Variable para iterar en el arreglo de contactos
+		char busquedaNombre[100]; //Variable para buscar un contacto en el arreglo de contactos
+		int encontrado = 1; //Variable para saber si se encontró el contacto requerido
+		//Ciclo del menu --> para que vuelva al menu despues de usar una funcionalidad
+		while (opcion != 0){
+			switch(opcion){
+				case 1: //Agregar un contacto
+					if (numContacto == 100){
+						printf("Error, ha llegado al limite de contactos almacenados.\n\n");
+						break;
+					}
+					//Obtener el nombre desde stdin
+					printf("Digite el nombre del usuario a utilizar el servicio: ");
+					scanf("%s",inputNombre);
+					while (getchar()!='\n');
+					//Agregar el nuevo contacto al array de contactos
+					strncpy(contactos[numContacto].nombre,inputNombre,100);
+					//imprimirContacto(&contactos[numContacto]); //impresion de prueba
+					numContacto++;
+					//Escribir el nuevo contacto en Contactos.txt
+					FILE *file;
+					file= fopen("Contactos.txt","a"); //a = append,
+					fprintf(file,"%s\n",inputNombre);
+					fclose(file);
+					printf( "\nContacto guardado.\n\n");
+					break;
+
+
+				case 2: //Visualizar contactos
+					if (numContacto == 0){
+						printf( "No hay contactos actualmente.\n");
+						break;
+					}
+					else{
+						while (numero < numContacto){
+							printf("\n");
+							imprimirContacto(&contactos[numero]);
+							numero++;
+						}
+					}
+					numero = 0; //Reiniciar valor de numero para proximas impresiones
+					break;
+
+
+				case 3: //Comenzar un chat
+					if (numContacto == 0){
+					printf("No hay contactos almacenados. Agregue contactos con la opción 1.\n");
+					}
+					else {
+						//COMIENZA EL CHAT
+						printf("Escriba 1 para enviar mensajes a los clientes, 2 para conectarse al chat: ");	
+						opcion = 0; //donde se almacenará el input de opción del usuario
+						scanf("%d",&opcion); //scanear el input del usuario
+						while ((opcion != 1) && (opcion != 2)){ //restricciones
+							printf("Escriba 1 para enviar mensaje (cliente),  2 para conectarse al chat (servidor): ");
+							while (getchar()!='\n'); //limpiar el registro de standard input hasta la nueva línea (soluciona que "ccc" no vaya a entrar al while 3 veces, solo 1)
+								scanf("%d",&opcion); //volver a scanear hasta llegar a un valor válido
+							}
+							if (opcion == 1){ //cliente
+								printf("Ingrese el nombre del contacto a mensajear: ");
+								scanf("%s",busquedaNombre); //Obtener el nombre del contacto a buscar
+								while (getchar()!='\n');
+									while (numero < numContacto){ //Analizar contactos
+										if (strncmp(contactos[numero].nombre,busquedaNombre,100) == 0){
+											encontrado = 0;
+											break;
+										}
+										numero++;
+									}
+									if (encontrado == 0){ //Contacto encontrado
+										printf("\nConversación válida con: %s \n",contactos[numero].nombre);
+										cliente();
+									}	
+									else //No existe el contacto
+										printf("El contacto no existe.\n");
+										
+									numero = 0; //reset para proximas busquedas
+									encontrado = 1; //reset para proximas busquedas	
+							}
+							else //servidor
+								servidor();
+								}
+							break;
+						}
+	//-----------------------------------------------------------------------------------
+	//----------------------------------------------------------------------------------
+		//Mostrar las opciones del menu
+		printf("\n1- Agregar contactos\n");
+		printf("2- Visualizar contactos\n");
+		printf("3- Abrir el Chat\n");
+		
+		//Volver a leer la input de opcion
+		scanf("%d",&opcion); //scanear el input del usuario
+		while ((opcion < 0) || (opcion > 4)){ //restricciones
+			printf("Ingrese un número de opción correcto: ");
+			while (getchar()!='\n'); //limpiar el registro de standard input hasta la nueva línea 
+				scanf("%d",&opcion); //volver a scanear hasta llegar a un valor válido
+			}
+		}
+		printf("\nGracias por utilizar el servicio.\n");
+		return 0;
+}
+
+	
+	
