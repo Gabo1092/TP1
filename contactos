@@ -1,0 +1,32 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+//Funcion  contactos
+int muestra( ){
+	 FILE *archivo;//buffer que almacena la dirección del archivo
+        char caracteres[30];
+        archivo = fopen("listaContactos.txt","r");//Almacena la dirección del archivo
+        if (archivo == NULL)
+                exit(1);
+ 
+        
+        while (feof(archivo) == 0)
+        {
+        fgets(caracteres,30,archivo);//Toma caracter por caracter y lo mete en caracteres
+        if(feof(archivo) == 0)
+		printf("%s",caracteres);
+               
+        }
+        fclose(archivo);//Cierra el doc
+        return 0;
+	 
+	 }
+ 
+
+
+
+
+/************************************************************************************************************/
+int main(int argc, char *argv[]){
+muestra();
+}
